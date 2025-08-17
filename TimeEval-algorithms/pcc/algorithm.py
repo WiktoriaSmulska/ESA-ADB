@@ -63,13 +63,9 @@ def load_data(config: AlgorithmArgs) -> np.ndarray:
                 dataset[c] = dataset["is_anomaly"]
             dataset = dataset.drop(columns="is_anomaly")
         dataset = dataset.loc[:, all_used_channels + all_used_anomaly_columns]
-        data_columns = dataset.columns.tolist()[:len(all_used_channels)]
-
-    # Change channel names to index for further processing
-    config.customParameters.target_channel_indices = [data_columns.index(x) for x in config.customParameters.target_channels]
 
     labels = dataset[all_used_anomaly_columns].to_numpy()
-    dataset = dataset.to_numpy()[:, config.customParameters.target_channel_indices]
+    dataset = dataset[all_used_channels].to_numpy()
     meansOutput = str(config.modelOutput) + ".means.txt"
     stdsOutput = str(config.modelOutput) + ".stds.txt"
     if config.executionType == "train":
