@@ -47,7 +47,9 @@ def load_data(config: AlgorithmArgs) -> tuple[np.ndarray, np.ndarray, np.ndarray
     data = dataset[target_channels].to_numpy()
     labels = dataset[target_anomaly_columns].to_numpy()
 
-    return get_means_std(data, labels, config)
+    means, stds = get_means_stds(data, labels, config)
+
+    return data, means, stds
 
 def get_columns_names(filepath: str) -> tuple[list[str], list[str]]:
     columns = pd.read_csv(filepath, index_col="timestamp", nrows=0).columns.tolist()
@@ -65,18 +67,18 @@ def read_dataset(filepath: str, data_cols: list[str], target_anomaly_columns: li
 def get_valid_channels(raw_channels: list[str], data_cols: list[str], sort: bool = True) -> list[str]:
     if not raw_channels:
         print(f"No target_channels provided. Using all data columns: {data_cols}")
-        result = data_cols
+        valid_channels = data_cols
     else:
         seen = set()
-        result = [ch for ch in raw_channels if ch in data_cols and not (ch in seen or seen.add(ch))]
-        if not result:
+        valid_channels = [ch for ch in raw_channels if ch in data_cols and not (ch in seen or seen.add(ch))]
+        if not valid_channels:
             print(f"No valid target channels found in dataset, falling back to all data columns.")
-            result = data_cols
+            valid_channels = data_cols
 
     if sort:
-        result = sorted(result)
+        valid_channels = sorted(valid_channels)
 
-    return result
+    return valid_channels
 
 
 # Remove unused columns from dataset
@@ -88,7 +90,7 @@ def unravel_global_annotation(dataset: pd.DataFrame, original_anomaly_cols: list
         dataset = dataset.drop(columns="is_anomaly")
     return dataset
 
-def get_means_std(data: np.ndarray, labels: np.ndarray, config: AlgorithmArgs):
+def get_means_stds(data: np.ndarray, labels: np.ndarray, config: AlgorithmArgs):
     means_path = str(config.modelOutput) + ".means.txt"
     stds_path = str(config.modelOutput) + ".stds.txt"
 
@@ -104,7 +106,7 @@ def get_means_std(data: np.ndarray, labels: np.ndarray, config: AlgorithmArgs):
         means = np.atleast_1d(np.loadtxt(means_path))
         stds = np.atleast_1d(np.loadtxt(stds_path))
 
-    return data, means, stds
+    return means, stds
 
 
 def train(config: AlgorithmArgs):
