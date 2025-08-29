@@ -76,6 +76,22 @@ class AlgorithmArgs(argparse.Namespace):
         return dataset, data_columns, anomaly_columns
 
     @staticmethod
+    def get_valid_channels(raw_channels: list[str], data_cols: list[str], sort: bool = False) -> list[str]:
+        if not raw_channels:
+            print(f"No channels provided. Using all data columns: {data_cols}")
+            valid_channels = data_cols
+        else:
+            valid_channels = list(dict.fromkeys([ch for ch in raw_channels if ch in data_cols]))
+            if not valid_channels:
+                print("No valid channels found in dataset, falling back to all data columns.")
+                valid_channels = data_cols
+
+        if sort:
+            valid_channels.sort()
+
+        return valid_channels
+
+    @staticmethod
     def select_channels(requested_channels, all_channels, channel_type):
         if requested_channels is None or len(set(requested_channels).intersection(all_channels)) == 0:
             print(
@@ -84,26 +100,31 @@ class AlgorithmArgs(argparse.Namespace):
         return [x for x in requested_channels if x in all_channels]
 
     def _select_input_and_target_channels(self, data_columns):
-        self.customParameters.input_channels = self.select_channels(
-            self.customParameters.input_channels, data_columns, "input"
+        self.customParameters.input_channels = self.get_valid_channels(
+            self.customParameters.input_channels, data_columns
         )
-        self.customParameters.target_channels = self.select_channels(
-            self.customParameters.target_channels, data_columns, "target"
+        self.customParameters.target_channels = self.get_valid_channels(
+            self.customParameters.target_channels, data_columns
         )
 
     def _unravel_global_annotation(self, dataset, data_columns):
         all_used_channels = list(
-            dict.fromkeys(self.customParameters.input_channels + self.customParameters.target_channels))
+            dict.fromkeys(self.customParameters.input_channels + self.customParameters.target_channels)
+        )
         all_used_anomaly_columns = [f"is_anomaly_{channel}" for channel in all_used_channels]
 
-        # Handle global is_anomaly
-        if "is_anomaly" in dataset.columns and len(set(dataset.columns) & set(all_used_anomaly_columns)) == 0:
+        # Handle global "is_anomaly"
+        if "is_anomaly" in dataset.columns and not any(col in dataset.columns for col in all_used_anomaly_columns):
             for c in all_used_anomaly_columns:
                 dataset[c] = dataset["is_anomaly"]
-            dataset = dataset.drop(columns="is_anomaly")
+            dataset.drop(columns="is_anomaly", inplace=True)
 
-        dataset = dataset.loc[:, all_used_channels + all_used_anomaly_columns]
-        return dataset, all_used_channels, all_used_anomaly_columns
+        all_columns = list(dataset.columns)
+        for col in all_used_anomaly_columns:
+            if col not in dataset.columns:
+                dataset[col] = 0
+
+        return dataset, data_columns, all_used_anomaly_columns
 
     def _map_channels_to_indices(self, data_columns):
         self.customParameters.input_channel_indices = [data_columns.index(x) for x in
@@ -169,6 +190,7 @@ class AlgorithmArgs(argparse.Namespace):
                 print(f"Cannot use validation_date_split '{validation_date_split}' because timestamp is not datetime")
                 return None
         return validation_date_split
+
 
     @staticmethod
     def from_sys_args() -> 'AlgorithmArgs':
