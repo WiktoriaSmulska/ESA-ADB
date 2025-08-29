@@ -34,6 +34,7 @@ class AlgorithmArgs(argparse.Namespace):
         args["customParameters"] = CustomParameters(**filtered_parameters)
         return AlgorithmArgs(**args)
 
+
 def get_columns_names(filepath: str) -> tuple[list[str], list[str]]:
     columns = pd.read_csv(filepath, index_col="timestamp", nrows=0).columns.tolist()
     anomaly_columns = [col for col in columns if col.startswith("is_anomaly")]
@@ -47,20 +48,20 @@ def read_dataset(filepath: str, data_cols: list[str], anomaly_cols: list[str]) -
     return pd.read_csv(filepath, index_col="timestamp", parse_dates=True, dtype=dtypes)
 
 
-def get_valid_channels(raw_channels: list[str], data_cols: list[str]) -> list[str]:
+def get_valid_channels(raw_channels: list[str], data_cols: list[str], sort: bool) -> list[str]:
     if not raw_channels:
-        print(f"No target_channels provided. Using all data columns (original order): {data_cols}")
-        return data_cols
+        print(f"No target_channels provided. Using all data columns: {data_cols}")
+        valid_channels = data_cols
     else:
-        filtered = [ch for ch in raw_channels if ch in data_cols]
-        valid_channels = list(dict.fromkeys(filtered))
-
+        valid_channels = list(dict.fromkeys([ch for ch in raw_channels if ch in data_cols]))
         if not valid_channels:
-            print("No valid target channels found. Falling back to all data columns.")
-            return data_cols
+            print("No valid target channels found in dataset, falling back to all data columns.")
+            valid_channels = data_cols
 
-        return sorted(valid_channels)
+    if sort:
+        valid_channels.sort()
 
+    return valid_channels
 
 
 def unravel_global_annotation(dataset: pd.DataFrame, original_anomaly_cols: list[str],
@@ -79,7 +80,7 @@ def get_means_stds(data: np.ndarray, labels: np.ndarray, config: AlgorithmArgs) 
     if config.executionType == "train":
         means = [np.mean(data[:, i][labels[:, i] == 0]) for i in range(data.shape[1])]
         stds = [np.std(data[:, i][labels[:, i] == 0]) for i in range(data.shape[1])]
-        stds = np.where(np.asarray(stds) == 0, 1, stds) # do not divide constant signals by zero
+        stds = np.where(np.asarray(stds) == 0, 1, stds)  # do not divide constant signals by zero
 
         np.savetxt(means_path, means)
         np.savetxt(stds_path, stds)
@@ -98,7 +99,7 @@ def load_data(config: AlgorithmArgs) -> tuple[np.ndarray, float]:
     dataset = read_dataset(config.dataInput, data_columns, anomaly_columns)
 
     target_channels = get_valid_channels(
-        config.customParameters.target_channels, data_columns
+        config.customParameters.target_channels, data_columns, sort=True
     )
     config.customParameters.target_channels = target_channels
 
