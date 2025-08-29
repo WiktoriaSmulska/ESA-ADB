@@ -63,7 +63,8 @@ class AlgorithmArgs(argparse.Namespace):
         if self.executionType == "train":
             return self._prepare_training_data(dataset, all_used_anomaly_columns)
         else:
-            return self._prepare_inference_data(dataset, all_used_anomaly_columns)
+            dataset = np.expand_dims(dataset.values[:, :-len(all_used_anomaly_columns)], axis=0).astype(np.float32)
+            return dataset, None, None, None
 
     def _read_dataset(self):
         columns = pd.read_csv(self.dataInput, index_col="timestamp", nrows=0).columns.tolist()
@@ -76,18 +77,21 @@ class AlgorithmArgs(argparse.Namespace):
 
         return dataset, data_columns, anomaly_columns
 
-    def _select_input_and_target_channels(self, data_columns):
-        def select_channels(requested_channels, all_channels, channel_type):
-            if requested_channels is None or len(set(requested_channels).intersection(all_channels)) == 0:
-                print(
-                    f"{channel_type.capitalize()} channels not given or not present in the data, selecting all: {all_channels}")
-                return all_channels
-            return [x for x in requested_channels if x in all_channels]
+    @staticmethod
+    def select_channels(requested_channels, all_channels, channel_type):
+        if requested_channels is None or len(set(requested_channels).intersection(all_channels)) == 0:
+            print(
+                f"{channel_type.capitalize()} channels not given or not present in the data, selecting all: {all_channels}")
+            return all_channels
+        return [x for x in requested_channels if x in all_channels]
 
-        self.customParameters.input_channels = select_channels(self.customParameters.input_channels, data_columns,
-                                                               "input")
-        self.customParameters.target_channels = select_channels(self.customParameters.target_channels, data_columns,
-                                                                "target")
+    def _select_input_and_target_channels(self, data_columns):
+        self.customParameters.input_channels = self.select_channels(
+            self.customParameters.input_channels, data_columns, "input"
+        )
+        self.customParameters.target_channels = self.select_channels(
+            self.customParameters.target_channels, data_columns, "target"
+        )
 
     def _unravel_global_annotation(self, dataset, data_columns):
         all_used_channels = list(
@@ -168,9 +172,6 @@ class AlgorithmArgs(argparse.Namespace):
                 return None
         return validation_date_split
 
-    def _prepare_inference_data(self, dataset, anomaly_columns):
-        dataset = np.expand_dims(dataset.values[:, :-len(anomaly_columns)], axis=0).astype(np.float32)
-        return dataset, None, None, None
 
 
     @staticmethod
