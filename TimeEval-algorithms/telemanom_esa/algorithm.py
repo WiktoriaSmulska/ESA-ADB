@@ -55,7 +55,10 @@ class AlgorithmArgs(argparse.Namespace):
         dataset, data_columns, anomaly_columns = self._read_dataset()
 
         self._select_input_and_target_channels(data_columns)
-        dataset, data_columns, all_used_anomaly_columns = self._unravel_global_annotation(dataset, data_columns)
+        target_anomaly_cols = [f"is_anomaly_{ch}" for ch in self.customParameters.target_channels]
+
+        dataset = self._unravel_global_annotation(dataset, anomaly_columns, target_anomaly_cols)
+        all_used_anomaly_columns = [col for col in target_anomaly_cols if col in dataset.columns]
         self._map_channels_to_indices(data_columns)
 
         if self.executionType == "train":
@@ -91,14 +94,6 @@ class AlgorithmArgs(argparse.Namespace):
 
         return valid_channels
 
-    @staticmethod
-    def select_channels(requested_channels, all_channels, channel_type):
-        if requested_channels is None or len(set(requested_channels).intersection(all_channels)) == 0:
-            print(
-                f"{channel_type.capitalize()} channels not given or not present in the data, selecting all: {all_channels}")
-            return all_channels
-        return [x for x in requested_channels if x in all_channels]
-
     def _select_input_and_target_channels(self, data_columns):
         self.customParameters.input_channels = self.get_valid_channels(
             self.customParameters.input_channels, data_columns
@@ -107,24 +102,13 @@ class AlgorithmArgs(argparse.Namespace):
             self.customParameters.target_channels, data_columns
         )
 
-    def _unravel_global_annotation(self, dataset, data_columns):
-        all_used_channels = list(
-            dict.fromkeys(self.customParameters.input_channels + self.customParameters.target_channels)
-        )
-        all_used_anomaly_columns = [f"is_anomaly_{channel}" for channel in all_used_channels]
-
-        # Handle global "is_anomaly"
-        if "is_anomaly" in dataset.columns and not any(col in dataset.columns for col in all_used_anomaly_columns):
-            for c in all_used_anomaly_columns:
-                dataset[c] = dataset["is_anomaly"]
-            dataset.drop(columns="is_anomaly", inplace=True)
-
-        all_columns = list(dataset.columns)
-        for col in all_used_anomaly_columns:
-            if col not in dataset.columns:
-                dataset[col] = 0
-
-        return dataset, data_columns, all_used_anomaly_columns
+    def _unravel_global_annotation(dataset: pd.DataFrame, original_anomaly_cols: list[str],
+                                   target_channel_anomaly_cols: list[str]) -> pd.DataFrame:
+        if len(original_anomaly_cols) == 1 and original_anomaly_cols[0] == "is_anomaly":  # Handle datasets with only one global is_anomaly column
+            for col in target_channel_anomaly_cols:
+                dataset[col] = dataset["is_anomaly"]
+            dataset = dataset.drop(columns="is_anomaly")
+        return dataset
 
     def _map_channels_to_indices(self, data_columns):
         self.customParameters.input_channel_indices = [data_columns.index(x) for x in
