@@ -43,7 +43,6 @@ def set_random_state(config: AlgorithmArgs) -> None:
     np.random.seed(seed)
 
 
-
 def get_valid_channels(raw_channels: List[str], data_cols: List[str]) -> List[str]:
     if not raw_channels:
         print(f"No target_channels provided. Using all data columns (original order): {data_cols}")
@@ -58,19 +57,17 @@ def get_valid_channels(raw_channels: List[str], data_cols: List[str]) -> List[st
 
         return valid_channels
 
-
-def load_dataset_with_columns(file_path: str) -> Tuple[pd.DataFrame, List[str], List[str]]:
-    df = pd.read_csv(file_path, index_col="timestamp", parse_dates=True)
-    columns = df.columns.tolist()
-
-    anomaly_columns = [x for x in columns if x.startswith("is_anomaly")]
+def get_columns_names(filepath: str) -> tuple[list[str], list[str]]:
+    columns = pd.read_csv(filepath, index_col="timestamp", nrows=0).columns.tolist()
+    anomaly_columns = [col for col in columns if col.startswith("is_anomaly")]
     data_columns = columns[:-len(anomaly_columns)] if anomaly_columns else columns
+    return data_columns, anomaly_columns
 
-    dtypes = {col: np.float32 for col in data_columns}
-    dtypes.update({col: np.uint8 for col in anomaly_columns})
-    df = df.astype(dtypes)
 
-    return df, data_columns, anomaly_columns
+def read_dataset(filepath: str, data_cols: list[str], anomaly_cols: list[str]) -> pd.DataFrame:
+    dtypes = {col: np.float32 for col in data_cols}
+    dtypes.update({col: np.uint8 for col in anomaly_cols})
+    return pd.read_csv(filepath, index_col="timestamp", parse_dates=True, dtype=dtypes)
 
 
 def handle_global_anomaly_column(dataset: pd.DataFrame, anomaly_columns: List[str],
@@ -122,7 +119,8 @@ def normalize_data(
 def load_data(config) -> Tuple[np.ndarray, float]:
     print(f"Loading: {config.dataInput}")
 
-    dataset, data_columns, anomaly_columns = load_dataset_with_columns(config.dataInput)
+    data_columns, anomaly_columns = get_columns_names(config.dataInput)
+    dataset = read_dataset(config.dataInput, data_columns, anomaly_columns)
 
     raw_channels = config.customParameters.target_channels
     target_channels = get_valid_channels(raw_channels, data_columns)
