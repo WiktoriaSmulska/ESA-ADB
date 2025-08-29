@@ -55,9 +55,7 @@ class AlgorithmArgs(argparse.Namespace):
         dataset, data_columns, anomaly_columns = self._read_dataset()
 
         self._select_input_and_target_channels(data_columns)
-
         dataset, data_columns, all_used_anomaly_columns = self._unravel_global_annotation(dataset, data_columns)
-
         self._map_channels_to_indices(data_columns)
 
         if self.executionType == "train":
@@ -171,8 +169,6 @@ class AlgorithmArgs(argparse.Namespace):
                 print(f"Cannot use validation_date_split '{validation_date_split}' because timestamp is not datetime")
                 return None
         return validation_date_split
-
-
 
     @staticmethod
     def from_sys_args() -> 'AlgorithmArgs':
