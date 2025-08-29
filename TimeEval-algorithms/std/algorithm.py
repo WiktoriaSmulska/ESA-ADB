@@ -28,30 +28,19 @@ class AlgorithmArgs(argparse.Namespace):
         return AlgorithmArgs(**args)
 
 
-
 def load_data(config: AlgorithmArgs) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     print(f"Loading: {config.dataInput}")
 
     data_columns, anomaly_columns = get_columns_names(config.dataInput)
     dataset = read_dataset(config.dataInput, data_columns, anomaly_columns)
 
-    target_channels_alpha = get_valid_channels(
+    target_channels = get_valid_channels(
         config.customParameters.target_channels,
         data_columns,
-        sort=True,
-        sort_type="default"
+        sort=True
     )
-    print(f"Channels sorted alphabetically: {target_channels_alpha}")
+    print(f"Channels sorted: {target_channels}")
 
-    target_channels_numeric = get_valid_channels(
-        config.customParameters.target_channels,
-        data_columns,
-        sort=True,
-        sort_type="numeric"
-    )
-    print(f"Channels sorted numerically: {target_channels_numeric}")
-
-    target_channels = target_channels_alpha
     config.customParameters.target_channels = target_channels
 
     target_anomaly_columns = [f"is_anomaly_{ch}" for ch in target_channels]
@@ -66,6 +55,7 @@ def load_data(config: AlgorithmArgs) -> tuple[np.ndarray, np.ndarray, np.ndarray
 
     return data, means, stds
 
+
 def get_columns_names(filepath: str) -> tuple[list[str], list[str]]:
     columns = pd.read_csv(filepath, index_col="timestamp", nrows=0).columns.tolist()
     target_anomaly_columns = [col for col in columns if col.startswith("is_anomaly")]
@@ -79,7 +69,7 @@ def read_dataset(filepath: str, data_cols: list[str], target_anomaly_columns: li
     return pd.read_csv(filepath, index_col="timestamp", parse_dates=True, dtype=dtypes)
 
 
-def get_valid_channels(raw_channels: list[str], data_cols: list[str], sort: bool, sort_type: str) -> list[str]:
+def get_valid_channels(raw_channels: list[str], data_cols: list[str], sort: bool) -> list[str]:
     if not raw_channels:
         print(f"No target_channels provided. Using all data columns: {data_cols}")
         valid_channels = data_cols
@@ -90,16 +80,12 @@ def get_valid_channels(raw_channels: list[str], data_cols: list[str], sort: bool
             valid_channels = data_cols
 
     if sort:
-        if sort_type == "numeric":
-            valid_channels.sort(key=lambda ch: int(ch.split("_")[1]))
-        elif sort_type == "default":
-            valid_channels.sort()
+        valid_channels.sort()
 
     return valid_channels
 
 
-
-# Remove unused columns from dataset
+# Handle datasets with a single global 'is_anomaly' column by duplicating it per target channel
 def unravel_global_annotation(dataset: pd.DataFrame, original_anomaly_cols: list[str],
                               target_channel_anomaly_cols: list[str]) -> pd.DataFrame:
     if len(original_anomaly_cols) == 1 and original_anomaly_cols[0] == "is_anomaly":
@@ -108,6 +94,7 @@ def unravel_global_annotation(dataset: pd.DataFrame, original_anomaly_cols: list
         dataset = dataset.drop(columns="is_anomaly")
     return dataset
 
+
 def get_means_stds(data: np.ndarray, labels: np.ndarray, config: AlgorithmArgs):
     means_path = str(config.modelOutput) + ".means.txt"
     stds_path = str(config.modelOutput) + ".stds.txt"
@@ -115,7 +102,7 @@ def get_means_stds(data: np.ndarray, labels: np.ndarray, config: AlgorithmArgs):
     if config.executionType == "train":
         means = [np.mean(data[:, i][labels[:, i] == 0]) for i in range(data.shape[1])]
         stds = [np.std(data[:, i][labels[:, i] == 0]) for i in range(data.shape[1])]
-        stds = np.where(np.asarray(stds) == 0, 1, stds)# do not divide constant signals by zero
+        stds = np.where(np.asarray(stds) == 0, 1, stds)  # do not divide constant signals by zero
 
         np.savetxt(means_path, means)
         np.savetxt(stds_path, stds)
@@ -140,7 +127,6 @@ def execute(config: AlgorithmArgs):
 
 
 if __name__ == "__main__":
-
     config = AlgorithmArgs.from_sys_args()
     print(f"Config: {config}")
 
